@@ -3,6 +3,7 @@ import ase, os, numpy as np, sys
 from typing import Union, Optional, Callable, Any, List
 from flare.bffs.sgp._C_flare import Structure, SparseGP
 from flare.bffs.sgp.sparse_gp import optimize_hyperparameters
+from ase.calculators.calculator import PropertyNotImplementedError
 import logging
 import time
 
@@ -285,7 +286,10 @@ class LMPOTF:
         pe = frame.get_potential_energy()
         pe -= np.sum(self.energy_correction[types - 1])
         F = frame.get_forces()
-        stress = frame.get_stress(voigt=False)
+        try:
+            stress = frame.get_stress(voigt=False)
+        except PropertyNotImplementedError:
+            stress = None
         if self.dft_xyz_fname is not None:
             ase.io.write(self.dft_xyz_fname.replace("*", str(step)), frame, format="extxyz")
         if self.force_training:
@@ -294,6 +298,8 @@ class LMPOTF:
             structure.energy = np.array([pe])
         if self.stress_training:
             structure.stresses = transform_stress(stress)
+        else:
+            structure.stresses = None
         self.dft_calls += 1
         self.last_dft_call = step
         self.post_dft_callback(self, step)
