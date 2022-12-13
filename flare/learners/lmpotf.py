@@ -1,4 +1,4 @@
-import lammps
+from lammps import lammps
 import ase, os, numpy as np, sys
 from typing import Union, Optional, Callable, Any, List
 from flare.bffs.sgp._C_flare import Structure, SparseGP
