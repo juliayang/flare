@@ -289,7 +289,8 @@ class SGP_Wrapper:
             rel_e_noise, rel_f_noise, rel_s_noise = rel_efs_noise
 
             gp.update_db(
-                train_struc,
+                train_str
+            uc,
                 train_struc.forces,
                 custom_range=custom_range,
                 energy=energy,
