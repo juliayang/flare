@@ -2,7 +2,9 @@ from lammps import lammps
 import ase, os, numpy as np, sys
 from typing import Union, Optional, Callable, Any, List
 from flare.bffs.sgp._C_flare import Structure, SparseGP
-from flare.bffs.sgp.sparse_gp import optimize_hyperparameters
+from ase import Atoms
+from flare.atoms import FLARE_Atoms
+from flare.bffs.sgp.sparse_gp import optimize_hyperparameters, SGP_Wrapper
 from ase.calculators.calculator import PropertyNotImplementedError
 import logging
 import time
@@ -71,7 +73,8 @@ class LMPOTF:
 
     def __init__(
         self,
-        sparse_gp: SparseGP,
+        sparse_gp_wrapper:SGP_Wrapper,
+        #sparse_gp: SparseGP,
         descriptors: List,
         rcut: float,
         type2number: Union[(int, List[int])],
@@ -98,7 +101,10 @@ class LMPOTF:
         """
 
         """
-        self.sparse_gp = sparse_gp
+        self.sparse_gp_wrapper = sparse_gp_wrapper
+        self.rel_efs_noise = [1,1,1]
+        self.sparse_gp = sparse_gp_wrapper.sparse_gp
+        self.atom_indices = sparse_gp_wrapper.atom_indices
         self.descriptors = np.atleast_1d(descriptors)
         self.rcut = rcut
         self.type2number = np.atleast_1d(type2number)
@@ -162,11 +168,35 @@ class LMPOTF:
             types = lmp.gather_atoms("type", 0, 1)
             types = np.ctypeslib.as_array(types, shape=natoms)
             structure = Structure(cell, types - 1, x, self.rcut, self.descriptors)
+
+            # Convert coded species to 0, 1, 2, etc.
+            if isinstance(structure, (Atoms, FLARE_Atoms)):
+                coded_species = []
+                for spec in structure.numbers:
+                    coded_species.append(self.species_map[spec])
+            elif isinstance(structure, Structure):
+                coded_species = structure.species
+            else:
+                raise Exception
+
+            # Convert flare structure to structure descriptor.
+            structure_descriptor = Structure(
+                structure.cell,
+                coded_species,
+                structure.positions,
+                self.rcut,
+                self.descriptors,
+            )
+
+            rel_e_noise, rel_f_noise, rel_s_noise = self.rel_efs_noise
+
             if self.dft_calls == 0:
                 self.logger.info("Initial step, calling DFT")
                 pe, F = self.run_dft(cell, x, types, step, structure)
                 t0 = time.time()
-                self.sparse_gp.add_training_structure(structure)
+                self.sparse_gp.add_training_structure(
+                    structure_descriptor, self.atom_indices,
+                    rel_e_noise, rel_f_noise, rel_s_noise)
                 self.sparse_gp.add_random_environments(structure, [int(natoms/4)])
                 self.sparse_gp.update_matrices_QR()
                 self.time_training += time.time() - t0
@@ -209,7 +239,11 @@ class LMPOTF:
                     pe, F = self.run_dft(cell, x, types, step, structure)
                     atoms_to_be_added = np.arange(natoms)[stds > self.dft_add_threshold]
                     t0 = time.time()
-                    self.sparse_gp.add_training_structure(structure)
+
+                    self.sparse_gp.add_training_structure(
+                        structure_descriptor, self.atom_indices,
+                        rel_e_noise, rel_f_noise, rel_s_noise)
+
                     self.sparse_gp.add_specific_environments(
                         structure, atoms_to_be_added
                     )

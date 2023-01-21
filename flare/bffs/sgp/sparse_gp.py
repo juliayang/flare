@@ -289,8 +289,7 @@ class SGP_Wrapper:
             rel_e_noise, rel_f_noise, rel_s_noise = rel_efs_noise
 
             gp.update_db(
-                train_str
-            uc,
+                train_struc,
                 train_struc.forces,
                 custom_range=custom_range,
                 energy=energy,
@@ -370,7 +369,6 @@ class SGP_Wrapper:
         if sgp is None:
             sgp = self.sparse_gp
             self.atom_indices.append(atom_indices)
-
         sgp.add_training_structure(
             structure_descriptor, atom_indices, rel_e_noise, rel_f_noise, rel_s_noise
         )
