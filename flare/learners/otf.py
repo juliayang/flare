@@ -579,7 +579,8 @@ class OTF:
         f.info("\nCalling DFT...\n")
 
         # change from FLARE to DFT calculator
-        self.atoms.calc = deepcopy(self.dft_calc)
+        self.dft_calc.reset()
+        self.atoms.calc = self.dft_calc
 
         # Calculate DFT energy, forces, and stress.
         # Note that ASE and QE stresses differ by a minus sign.
