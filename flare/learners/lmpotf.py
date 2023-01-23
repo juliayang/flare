@@ -202,7 +202,7 @@ class LMPOTF:
                 ase.io.write(self.std_xyz_fname.replace("*", str(step)), frame, format="extxyz")
             wandb_log = {"max_uncertainty": np.amax(stds)}
             self.logger.info(f"Max uncertainty: {np.amax(stds)}")
-            call_dft = np.any(stds > self.dft_call_threshold)
+            call_dft = np.any(np.abs(stds) > self.dft_call_threshold)
             if call_dft:
                 t0 = time.time()
                 self.sparse_gp.predict_DTC(structure)
