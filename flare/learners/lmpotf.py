@@ -86,6 +86,7 @@ class LMPOTF:
         dft_add_threshold: float = 0.0025,
         dft_xyz_fname: Optional[str] = None,
         std_xyz_fname: Optional[str] = None,
+        write_files: Optional = True,
         model_fname: str = "otf.flare",
         hyperparameter_optimization: Callable[
             (["LMPOTF", object, int], bool)
@@ -111,6 +112,7 @@ class LMPOTF:
         self.species_map = self.sgp_wrapper.species_map
         self.descriptors = np.atleast_1d(descriptors)
         self.rcut = rcut
+        self.write_files = write_files
         self.type2number = np.atleast_1d(type2number)
         self.ntypes = len(self.type2number)
         self.energy_correction = np.atleast_1d(energy_correction)
@@ -279,6 +281,7 @@ class LMPOTF:
                         np.log10(np.abs(F - predF)/np.abs(F)).ravel()
                     )
                 self.wandb.log(wandb_log, step=step)
+
         #except Exception as err:
         #    try:
         #        self.logger.exception("LMPOTF ERROR")
@@ -287,7 +290,14 @@ class LMPOTF:
         #        err = None
         #        del err
 
+    def check_converged(self):
+        """Check if DFT run is valid and that properties can be trusted"""
+        if not self.converged:
+            self.logger.exception("SCF CONVERGENCE ERROR")
+            raise Exception
+
     def run_dft(self, cell, x, types, step, structure):
+        self.converged = True
         t0 = time.time()
         self.dftcalc.reset()
         atomic_numbers = self.type2number[types - 1]
@@ -295,12 +305,10 @@ class LMPOTF:
             positions=x,
             numbers=atomic_numbers,
             cell=cell,
-            calculator=(self.dftcalc), ## ?? JY
+            calculator=(self.dftcalc),
             pbc=True,
         )
-        # pre-condition for CP2K. need the atoms.calc to get initiated before atoms.get_() is used ?
-        #frame.calc.calculate(atoms=frame.copy(), properties=['forces', 'energy', 'stress'])
-        #frame.calc.atoms = frame.copy()
+
         pe = frame.get_potential_energy()
         pe -= np.sum(self.energy_correction[types - 1])
         F = frame.get_forces()
@@ -308,6 +316,15 @@ class LMPOTF:
             stress = frame.get_stress(voigt=False)
         except PropertyNotImplementedError:
             stress = np.array([None])
+
+        # check if ASE calculation is converged
+        if frame.calc.results['error']:
+            self.converged = False
+            self.logger.info('Frame ' + str(step) + ' did not converge')
+
+        # Before any data is saved, check for SCF convergence
+        self.check_converged()
+
         if self.dft_xyz_fname is not None:
             ase.io.write(self.dft_xyz_fname.replace("*", str(step)), frame, format="extxyz")
         if self.force_training:
@@ -322,4 +339,5 @@ class LMPOTF:
         self.post_dft_callback(self, step)
 
         self.time_dft += time.time() - t0
+
         return (pe, F)
