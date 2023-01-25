@@ -315,7 +315,7 @@ class LMPOTF:
         try:
             stress = frame.get_stress(voigt=False)
         except PropertyNotImplementedError:
-            stress = np.array([None])
+            pass
 
         # check if ASE calculation is converged
         if frame.calc.results['error']:
